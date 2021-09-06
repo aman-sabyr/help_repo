@@ -16,6 +16,7 @@ class UserCreateSerializer(serializers.Serializer):
     username = serializers.CharField(min_length=2, max_length=20, required=True)
     password = serializers.CharField(min_length=6, max_length=20, required=True)
     password_confirm = serializers.CharField(min_length=6, max_length=20, required=True)
+    email = serializers.EmailField(required=True)
 
     def validate_username(self, username):
         if User.objects.filter(username=username).exists():
@@ -38,7 +39,6 @@ class UserLoginSerializer(serializers.Serializer):
         # checks if there is any user with this username
         if not User.objects.filter(username=username).exists():
             raise serializers.ValidationError('User wasn\'t found')
-        print(User.objects.get(username=username).password)
         return username
 
     def validate(self, data):
@@ -122,6 +122,48 @@ class UserInfoUpdateSerializer(serializers.Serializer):
         request = self.context.get('request')
         user = request.user()
         return self.update(user, data)
+
+
+class UserActivationSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    activation_code = serializers.CharField(required=True)
+
+    def validate(self, data):
+        username = data.get('username')
+        activation_code = data.get('activation_code')
+        if not User.objects.filter(username=username, activation_code=activation_code).exists():
+            raise serializers.ValidationError('Activation code is not correct or user wasn\'t found!')
+        return data
+
+    def activate(self):
+        username = self.validated_data.get('username')
+        user = User.objects.get(username=username)
+        user.is_active = True
+        user.activation_code = ''
+        user.save()
+
+
+class UserChangePasswordSerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    last_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    new_password_confirm = serializers.CharField(required=True)
+
+    def validate(self, data):
+        username = data.get('username')
+        last_password = data.get('last_password')
+        new_password = data.get('new_password')
+        new_password_confirm = data.pop('new_password_confirm')
+        if not User.objects.filter(username=username).exists():
+            raise serializers.ValidationError('User wasn\'t found!')
+        user = User.objects.get(username=username)
+        if not user.check_password(last_password):
+            raise serializers.ValidationError('Last password is not correct!')
+        if new_password != new_password_confirm:
+            raise serializers.ValidationError('Passwords are not similar!')
+        user.set_password(raw_password=new_password)
+        user.save()
+        return data
 
 
 
